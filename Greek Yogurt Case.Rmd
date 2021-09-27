@@ -1,0 +1,204 @@
+---
+title: "Data preparation"
+author: "Team B01"
+date: "2021/6/12"
+output: html_document
+---
+
+## Part 1 Set up
+### Load Packages
+
+```{r 1}
+library(ggplot2)
+library(gtools)
+library(wordcloud)
+library(tm)
+library(reshape2)
+library(foreign)
+```
+
+### Load Data
+
+```{r 2A}
+LabelData=read.spss('Wegmans Survey.sav',to.data.frame=TRUE,use.value.labels=TRUE,trim_values=TRUE)
+head(LabelData)
+summary(LabelData)
+#Date variable is transformed as numberic and quantitive rating is transformed as qualitive rating
+```
+
+### Use another method to load data
+
+```{r 2B}
+library(haven)
+LabelData=read_sav('Wegmans Survey.sav')
+head(LabelData)
+summary(LabelData)
+#Variables are in reasonable ranges.
+```
+#### Conclusion of face validate check:
+Variables are in reasonable ranges, but there are many noises. We need to clean the data.
+
+
+## Part 2 Basic Data Cleanning and check
+### Sample Test
+```{r 3}
+library(stringr)
+Trim_Data=LabelData
+Trim_Data$Question33Areyou=str_trim(LabelData$Question33Areyou)
+Gender_Cleaned_Data=Trim_Data[Trim_Data$Question33Areyou=='Female'|Trim_Data$Question33Areyou=='Male',]
+popGender=c(0.89,0.11)
+sampGender=table(Gender_Cleaned_Data$Question33Areyou)
+cbind(popGender,sampGender = prop.table (sampGender))
+chisq.test(sampGender,p=popGender)
+```
+#### Conclusion of Sample Test:
+The p value is greater than 0.05, showing our sample matches population.
+
+
+
+### Continued Data Cleanning
+```{r 4}
+library(visdat)
+vis_miss(LabelData)
+# We learn that most missing values are from the same survey.
+New_Data=Gender_Cleaned_Data[Gender_Cleaned_Data$Question5AampP ==0 | Gender_Cleaned_Data$Question5AampP==1,]
+```
+
+## Part 4 Correlation Check
+```{r 8}
+library(corrplot)
+Attributes_Rating=New_Data[,47:59]
+Attributes_Rating=na.omit(Attributes_Rating)
+colnames(Attributes_Rating)=str_remove(string = colnames(Attributes_Rating),'Question6')
+cor(Attributes_Rating,use = "complete.obs")
+corrplot(round(cor(Attributes_Rating),3), tl.col="black", method = 'circle')
+
+
+
+Fage_Attributes=New_Data[,102:110]
+colnames(Fage_Attributes)=str_remove(string = colnames(Fage_Attributes),'Question24')
+Fage_Attributes=na.omit(Fage_Attributes)
+cor(Fage_Attributes)
+Chobani_Atrributes=New_Data[,114:122]
+colnames(Chobani_Atrributes)=str_remove(string = colnames(Chobani_Atrributes),'Question27')
+Chobani_Atrributes=na.omit(Chobani_Atrributes)
+cor(Chobani_Atrributes)
+Oikos_A1ttributes=New_Data[,126:135]
+colnames(Oikos_A1ttributes)=str_remove(string = colnames(Oikos_A1ttributes),'Question30')
+Oikos_A1ttributes=na.omit(Oikos_A1ttributes)
+cor(Oikos_A1ttributes)
+
+corrplot(round(cor(Fage_Attributes),3), tl.col="black", method = 'circle')
+corrplot(round(cor(Chobani_Atrributes),3), tl.col="black", method = 'circle')
+corrplot(round(cor(Oikos_A1ttributes),3), tl.col="black", method = 'circle')
+
+```
+
+
+
+
+
+## Part 5 Basic Visualization
+
+### Visualization of Retailers
+
+```{r 5}
+par(mfrow=c(3,3))
+Retailers=New_Data[,9:44]
+colnames(Retailers)=str_remove(string =colnames(Retailers),'Question5')
+for(i in (1:36)){
+  barplot(table(Retailers[,i]),main=names(Retailers)[i])
+  
+}
+```
+
+
+### Visualization of Attributes
+
+```{r 6}
+par(mfrow=c(3,3))
+for(j in (1:13)){
+  barplot(table(Attributes_Rating[,j]),main=names(Attributes_Rating)[j])
+}
+```
+
+
+### Visualization of Brands
+
+```{r 7}
+par(mfrow=c(3,3))
+Brands=New_Data[,61:67]
+colnames(Brands)=str_remove(string = colnames(Brands),'Question7')
+for(k in (1:7)){
+  barplot(table(Brands[,k]),main=names(Brands)[k])
+}
+```
+
+
+
+## Part 7 Coupon Effect
+```{r 9}
+ItemsData=read.csv('randItemSales.csv')
+library(tidyverse)
+aggregate=ItemsData%>%group_by(Household.Num)%>%mutate(TotalSale=sum(Sales),TotalCoupon=sum(Coupon))
+summary(lm(Sales~Coupon,data=aggregate))
+#Cupon affects the sales.
+```
+
+## Part 8 Word Cloud
+### Wordcloud for Q17-19
+```{r 10}
+text2=New_Data
+Vector<- c(text2$Question17WhendecidingwhatGreekYogurttopurchasewhatisthe.1reason, text2$Question18Whatwouldbethe2ndreasonwhyyouselectacertainbrandofGree, text2$Question19Whatwouldbeyour3rdreasonforselectingacertainbrandofGre)
+head(Vector)
+Vector
+corpusfinal<- Corpus(VectorSource(Vector))
+corpusfinal[[1]][1]
+corpusfinal <- tm_map(corpusfinal,removeNumbers)
+corpusfinal <- tm_map(corpusfinal,removePunctuation)
+corpusfinal <- tm_map(corpusfinal,stripWhitespace)
+corpusfinal <- tm_map(corpusfinal, content_transformer(tolower))
+corpusfinal <- tm_map(corpusfinal, removeWords,stopwords("english"))
+
+
+dtmFinal = TermDocumentMatrix(corpusfinal) 
+matrixFinal = as.matrix(dtmFinal)
+matrixFinal
+wordsFinal = sort(rowSums(matrixFinal),decreasing=TRUE) 
+wordsFinal
+dfFinal = data.frame(word = names(wordsFinal),freq=wordsFinal)
+#Create the wordcloud for Q17-19
+set.seed(1234) # for reproducibility 
+wordcloud(words = dfFinal$word, freq = dfFinal$freq, min.freq = 1,max.words=450, random.order=FALSE, rot.per=0.3,colors=brewer.pal(8, "Dark2"))
+```
+
+### Wordcloud for Q14
+```{r 11}
+corpusQ14<-Corpus(VectorSource(text2$Question14WhatdoyoupreparewithGreekYogurt))
+corpusQ14 <- tm_map(corpusQ14,removeNumbers)
+corpusQ14 <- tm_map(corpusQ14,removePunctuation)
+corpusQ14 <- tm_map(corpusQ14,stripWhitespace)
+corpusQ14 <- tm_map(corpusQ14, content_transformer(tolower))
+corpusQ14 <- tm_map(corpusQ14, removeWords,stopwords("english"))
+corpusQ14 <- tm_map(corpusQ14, removeWords,c("just","used","also", "like", "make", "etc", "add","uses", "lots", "place", "use", "yogurt", "sour"))
+
+dtmQ14 = TermDocumentMatrix(corpusQ14) 
+matrixQ14 = as.matrix(dtmQ14)
+matrixQ14
+wordsQ14 = sort(rowSums(matrixQ14),decreasing=TRUE) 
+wordsQ14
+dfQ14 = data.frame(word = names(wordsQ14),freq=wordsQ14)
+#Create the wordcloud for Q14
+set.seed(1234) # for reproducibility 
+wordcloud(words = dfQ14$word, freq = dfQ14$freq, min.freq = 1,max.words=450,scale=c(2.5,0.55), random.order=FALSE, rot.per=0.3,colors=brewer.pal(8, "Dark2"))
+```
+
+
+
+`
+
+
+
+
+
+
